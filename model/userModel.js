@@ -28,6 +28,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     default: "",
   },
+  isVerified: {
+    type: Boolean,
+    default: false,
+  },
 });
 
 module.exports = mongooge.model("Users", userSchema);
