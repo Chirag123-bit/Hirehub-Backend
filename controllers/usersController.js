@@ -1,12 +1,15 @@
 const User = require("../model/userModel");
+const Company = require("../model/CompanyModel");
 const bcrypt = require("bcrypt");
 const UserVerification = require("../model/UserVerification");
 const nodemailer = require("nodemailer");
-const { v4: uuidv4 } = require("uuid");
+
 const userVerification = require("../model/UserVerification");
 require("dotenv").config();
 const path = require("path");
+const { register_schema } = require("../validators/register_validator");
 
+// Node Mail Service Transporter
 let transporter = nodemailer.createTransport({
   service: "gmail",
   auth: {
@@ -15,6 +18,7 @@ let transporter = nodemailer.createTransport({
   },
 });
 
+// Verifying Connection
 transporter.verify((error, success) => {
   if (error) {
     console.log(error);
@@ -23,65 +27,140 @@ transporter.verify((error, success) => {
   }
 });
 
-const sendVerificationEmail = ({ _id, email }, res) => {
-  const currentUrl = "http://localhost:5000";
-  const uniqueString = uuidv4() + _id;
+module.exports.resendVerification = async (req, res) => {
+  const _id = req.body["id"];
+  const email = req.body["email"];
+  User.findOne({ _id })
+    .then((user) => {
+      console.log(user);
+      if (!user.isVerified) {
+        const code = Math.floor(Math.random() * (999999 - 100000 + 1) + 100000);
 
-  const mailOptions = {
-    from: process.env.AUTH_EMAIL,
-    to: email,
-    subject: "Verify Your Email",
-    html: `<p>Verify your email address to complete signin process.</p> 
+        const uniqueString = code + _id;
+        UserVerification.updateOne(
+          { userId: _id },
+          { uniqueString: uniqueString }
+        );
+
+        const mailOptions = {
+          from: process.env.AUTH_EMAIL,
+          to: email,
+          subject: "Verify Your Email",
+          html: `<p>Verify your email address to complete signin process.</p>
       <p> This link expires in <b>6 hours</b> </p>
-
-      <p> Press <a href=${
-        currentUrl + "user/verify/" + _id + "/" + uniqueString
-      }> Here </a> to verify your email  </p>
+      <p> Your Unique code is <b>${code}</b> </p>
     `,
-  };
-
-  const saltRounds = 10;
-  bcrypt
-    .hash(uniqueString, saltRounds)
-    .then((hashedUniqueString) => {
-      const newVerification = new UserVerification({
-        userId: _id,
-        uniqueString: hashedUniqueString,
-        createdAt: Date.now(),
-        expiresAt: Date.now() + 21600000,
-      });
-      newVerification
-        .save()
-        .then(() => {
-          transporter
-            .sendMail(mailOptions)
-            .then(() => {
-              res.json({
-                status: "Pending",
-                message: "Verification Email Sent",
-              });
-            })
-            .catch((error) => {
-              console.log(error);
-              res.json({
-                status: "Failed",
-                message: "An Error Occured",
-              });
+        };
+        transporter
+          .sendMail(mailOptions)
+          .then(() => {
+            return res.json({
+              msg: "Verification Email Sent Again",
+              status: true,
             });
-        })
-        .catch((e) => {
-          console.log(e);
-          res.json({
-            status: "Failed",
-            message: "An Error Occured",
+          })
+          .catch((error) => {
+            console.log(error);
+            return res.json({
+              msg: "Error re-sending verifiation mail",
+              status: false,
+            });
           });
-        });
+      }
     })
     .catch((e) => {
       console.log(e);
-      res.json({
-        status: "Failed",
-        message: "An Error Occured",
+      return res.json({
+        msg: "Error Finding user",
+        status: false,
+      });
+    });
+};
+module.exports.sendVerificationEmail = async (req, res) => {
+  const _id = req.body["id"];
+  const email = req.body["email"];
+  User.findOne({ _id })
+    .then((user) => {
+      console.log(_id);
+      if (!user.isVerified) {
+        const code = Math.floor(Math.random() * (999999 - 100000 + 1) + 100000);
+
+        const uniqueString = code + _id;
+
+        UserVerification.findOne({ userId: _id })
+          .then((reUser) => {
+            if (reUser) {
+              return res.json({
+                msg: "Please confirm your email address to continue",
+                status: true,
+              });
+            } else {
+              const mailOptions = {
+                from: process.env.AUTH_EMAIL,
+                to: email,
+                subject: "Verify Your Email",
+                html: `<p>Verify your email address to complete signin process.</p>
+        <p> This link expires in <b>6 hours</b> </p>
+        <p> Your Unique code is <b>${code}</b> </p>
+         `,
+              };
+
+              const saltRounds = 10;
+              bcrypt
+                .hash(uniqueString, saltRounds)
+                .then((hashedUniqueString) => {
+                  const newVerification = new UserVerification({
+                    userId: _id,
+                    uniqueString: hashedUniqueString,
+                    createdAt: Date.now(),
+                    expiresAt: Date.now() + 21600000,
+                  });
+                  newVerification
+                    .save()
+                    .then(() => {
+                      transporter
+                        .sendMail(mailOptions)
+                        .then(() => {
+                          return res.json({
+                            msg: "Verification Email Sent",
+                            status: true,
+                          });
+                        })
+                        .catch((error) => {
+                          console.log(error);
+                          return res.json({
+                            msg: "Error sending verifiation mail",
+                            status: false,
+                          });
+                        });
+                    })
+                    .catch((e) => {
+                      console.log(e);
+                      return res.json({
+                        msg: "Failed to save unique token",
+                        status: false,
+                      });
+                    });
+                })
+                .catch((e) => {
+                  console.log(e);
+                  return res.json({
+                    msg: "Failed to hash token",
+                    status: false,
+                  });
+                });
+            }
+          })
+          .catch((e) => {
+            console.log("Here");
+          });
+      }
+    })
+    .catch((e) => {
+      console.log(e);
+      return res.json({
+        msg: "User not found in database",
+        status: false,
       });
     });
 };
@@ -90,9 +169,11 @@ module.exports.verify = (req, res) => {
   let { userId, uniqueString } = req.params;
 
   userVerification
-    .find(userId)
+    .find({ userId })
     .then((result) => {
-      if (result.len > 0) {
+      console.log(userId);
+      console.log(result.length);
+      if (result.length > 0) {
         const { expiresAt } = result[0];
         const hashedUniqueString = result[0].uniqueString;
         if (expiresAt < Date.now()) {
@@ -102,18 +183,27 @@ module.exports.verify = (req, res) => {
               User.deleteOne({ _id: userId })
                 .then(() => {
                   let message = "The link has expired. Please Sign up again";
-                  res.redirect(`/user/verified/error=true&message=${message}`);
+                  return res.json({
+                    msg: message,
+                    status: false,
+                  });
                 })
                 .catch((error) => {
                   let message =
-                    "An error occured while deliting user with expired token";
-                  res.redirect(`/user/verified/error=true&message=${message}`);
+                    "An error occured while deleting user with expired token";
+                  return res.json({
+                    msg: message,
+                    status: false,
+                  });
                 });
             })
             .catch((error) => {
               console.log(error);
               let message = "Error deleting expired token";
-              res.redirect(`/user/verified/error=true&message=${message}`);
+              return res.json({
+                msg: message,
+                status: false,
+              });
             });
         } else {
           bcrypt
@@ -124,43 +214,59 @@ module.exports.verify = (req, res) => {
                   .then(() => {
                     UserVerification.deleteOne({ userId })
                       .then(() => {
-                        res.sendFile(
-                          path.join(__dirname, "./../views/verified.html")
-                        );
+                        let message = "Successfully Verified the account";
+                        return res.json({
+                          msg: message,
+                          status: "completed",
+                        });
                       })
                       .catch((e) => {
                         let message =
                           "An error occured while deleting user verification record";
-                        res.redirect(
-                          `/user/verified/error=true&message=${message}`
-                        );
+                        return res.json({
+                          msg: message,
+                          status: false,
+                        });
                       });
                   })
                   .catch((e) => {
                     let message = "An error occured while updating records";
-                    res.redirect(
-                      `/user/verified/error=true&message=${message}`
-                    );
+                    return res.json({
+                      msg: message,
+                      status: false,
+                    });
                   });
               } else {
-                let message = "Incorrect verification details";
-                res.redirect(`/user/verified/error=true&message=${message}`);
+                let message = "Incorrect verification code";
+                return res.json({
+                  msg: message,
+                  status: false,
+                });
               }
             })
             .catch((error) => {
               let message = "An error occured while comparing unique strings";
-              res.redirect(`/user/verified/error=true&message=${message}`);
+              return res.json({
+                msg: message,
+                status: false,
+              });
             });
         }
       } else {
-        let message = "Account Record does not exist";
-        res.redirect(`/user/verified/error=true&message=${message}`);
+        let message = "Successfully Verified the account";
+        return res.json({
+          msg: message,
+          status: "completed",
+        });
       }
     })
     .catch((e) => {
       console.log(e);
       let message = "An error occured while checking validation of user";
-      res.redirect(`/user/verified/error=true&message=${message}`);
+      return res.json({
+        msg: message,
+        status: false,
+      });
     });
 };
 
@@ -168,34 +274,142 @@ module.exports.verified = (req, res) => {
   res.sendFile(path.join(__dirname, "./../views/verified.html"));
 };
 
+module.exports.codeSent = (req, res) => {
+  res.sendFile(path.join(__dirname, "./../views/code_sent.html"));
+};
+
 module.exports.register = async (req, res, next) => {
   try {
-    const { username, email, password } = req.body;
+    const {
+      firstName,
+      lastName,
+      gender,
+      phone,
+      email,
+      type,
+      username,
+      password,
+      avatar,
+      title,
+      skills,
+      sector,
+      summary,
+      workSet,
+      educationSet,
+      c_name,
+      csector,
+      country,
+      region,
+      cabout,
+      cdesc,
+    } = req.body;
     const usernameCheck = await User.findOne({ username });
+
+    //Username and Email Validation
     if (usernameCheck)
       return res.json({ msg: "Username already used", status: false });
     const emailCheck = await User.findOne({ email });
     if (emailCheck)
       return res.json({ msg: "Email already used", status: false });
+
+    const companyNameCheck = await Company.findOne({ name: c_name });
+
+    // Hashing the user's password
     const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await User.create({
-      email,
-      username,
+
+    // Creating new user based on user's input
+    const user = new User({
+      firstName: firstName,
+      lastName: lastName,
+      gender: gender,
+      phone: phone,
+      email: email,
+      type: type,
+      username: username,
+      avatar: avatar,
+
+      professional: {
+        title: title,
+        sector: sector,
+        skills: skills,
+        summary: summary,
+      },
+      additional: {
+        education: educationSet.map((edu) => ({
+          degree: edu.etitle,
+          college: edu.ecollege,
+          startDate: edu.estart,
+          endDate: edu.eend,
+        })),
+        experience: workSet.map((work) => ({
+          job_title: work.wtitle,
+          company: work.wcompany,
+          company_location: work.wlocation,
+          work_type: work.wtype,
+          startDate: work.wstart,
+          endDate: work.wend,
+        })),
+      },
+
       password: hashedPassword,
       isVerified: false,
-    })
+    });
+
+    // Saving new user
+    user
+      .save()
       .then((result) => {
-        sendVerificationEmail(result, res);
-        return res.json({ status: true, user });
+        if (result.type === "Company") {
+          if (companyNameCheck) {
+            result.deleteOne();
+            return res.json({
+              msg: "Company Name already exists",
+              status: false,
+            });
+          }
+          const company = new Company({
+            user: result._id,
+            name: c_name,
+            sector: csector,
+            country: country,
+            region: region,
+            about: cabout,
+            desc: cdesc,
+            phone: phone,
+          });
+          company
+            .save()
+            .then((company) => {
+              return res.json({
+                status: true,
+                user: result,
+                company: company,
+                msg: "Successfully created account",
+              });
+            })
+            .catch((e) => {
+              result.deleteOne();
+              return res.json({
+                status: false,
+                msg: "Failed to create account",
+              });
+            });
+        } else {
+          return res.json({
+            status: true,
+            user: result,
+            msg: "Successfully created account",
+          });
+        }
       })
       .catch((error) => {
         console.log(error);
         res.json({
-          status: "Failed",
+          status: false,
           message: "An Error Occured",
         });
       });
-    delete user.password;
+    delete user.password; // Delete unsecured password
   } catch (ex) {
     next(ex);
   }
@@ -213,7 +427,16 @@ module.exports.login = async (req, res, next) => {
       console.log("Invalid");
       return res.json({ msg: "Incorrect Username or Password", status: false });
     }
+
     delete user.password;
+    if (user.type === "Company") {
+      const company = await Company.findOne({ user: user._id });
+      return res.json({
+        status: true,
+        user,
+        company,
+      });
+    }
     return res.json({
       status: true,
       user,
