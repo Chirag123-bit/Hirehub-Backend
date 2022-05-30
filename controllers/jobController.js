@@ -2,6 +2,8 @@ const express = require("express");
 const router = new express.Router();
 const Job = require("../model/JobModel");
 const Company = require("../model/CompanyModel");
+const userModel = require("../model/userModel");
+const util = require("util");
 
 module.exports.addJob = async (req, res, next) => {
   try {
@@ -147,6 +149,193 @@ module.exports.getJob = async (req, res, next) => {
     return res.json({
       success: true,
       data: job,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.json({
+      success: false,
+      msg: error,
+    });
+  }
+};
+
+module.exports.applyForJob = async (req, res, next) => {
+  try {
+    const { user, job } = req.body.params;
+    const appliedJob = await Job.findById(job);
+    const appliedUser = await userModel.findById(user);
+    //find if the user has already applied for this job
+    // console.log(appliedUser, job);
+    if (appliedJob.applicants) {
+      appliedJob.applicants.forEach((applicant) => {
+        if (applicant.applicant == user) {
+          return res.json({
+            success: false,
+            msg: "You have already applied for this job",
+          });
+        }
+      });
+    }
+    appliedJob.applicants.push({
+      applicant: user,
+      status: "New",
+      appliedDate: new Date(),
+    });
+    appliedUser.appliedJobs.push({
+      job: job,
+      status: "New",
+      appliedDate: new Date(),
+    });
+    appliedJob.save();
+    appliedUser.save();
+    return res.json({
+      success: true,
+      msg: "You have applied for this job",
+    });
+  } catch (error) {
+    console.log(error);
+    return res.json({
+      success: false,
+      msg: error,
+    });
+  }
+};
+
+// module.exports.getCompanyJobDetail = async (req, res, next) => {
+//   try {
+//     const result = await Company.findById(req.query.user).select("jobs");
+//     // .populate("applicants.$applicant")
+//     const jobArray = result["jobs"];
+//     var op = [];
+//     for (job_id in jobArray) {
+//       const objId = jobArray[job_id];
+//       var dat = await getReusableJobDetail(objId);
+//       var jobData = await Job.findById(objId);
+//       op.push({ data: dat, job: jobData });
+//     }
+//     return res.json({
+//       success: true,
+//       data: op,
+//     });
+//   } catch (error) {
+//     console.log(error);
+//     return res.json({
+//       success: false,
+//       error: error,
+//       msg: error,
+//     });
+//   }
+// };
+
+const getReusableJobDetail = async (job_id) => {
+  var res;
+  // const Jobs = await Job.findById(job_id).populate({
+  //   path: "applicants",
+  //   populate: {
+  //     path: "applicant",
+  //     model: "Users",
+  //   },
+  // });
+  // console.log(Jobs);
+  await Job.aggregate([
+    { $match: { _id: job_id } },
+    {
+      $lookup: {
+        from: "users",
+        localField: "applicants.applicant",
+        foreignField: "_id",
+        as: "user_detail",
+      },
+    },
+
+    { $unwind: "$applicants" },
+    {
+      $group: {
+        _id: {
+          status: "$applicants.status",
+        },
+
+        data: { $push: "$user_detail" },
+      },
+    },
+  ]).then((result) => {
+    res = result;
+    return result;
+  });
+  return res;
+};
+
+const getReusableJobDetail1 = async (job_id) => {
+  // const Jobs = await Job.findById(job_id).populate({
+  //   path: "applicants",
+  //   populate: {
+  //     path: "applicant",
+  //     model: "Users",
+  //   },
+  // });
+  // console.log(Jobs);
+  const Jobs = await Job.findById(job_id).populate({
+    path: "applicants",
+    populate: {
+      path: "applicant",
+      model: "Users",
+    },
+  });
+  console.log(Jobs);
+
+  return Jobs;
+};
+
+module.exports.getCompanyJobDetail = async (req, res, next) => {
+  var op = [];
+
+  try {
+    const result = await Company.findById(req.query.user).select("jobs");
+
+    //get details of all the jobs
+    const jobArray = result["jobs"];
+    for (job_id in jobArray) {
+      const objId = jobArray[job_id];
+      var dat = await getReusableJobDetail1(objId);
+      op.push({ data: dat });
+    }
+    return res.json({
+      success: true,
+      data: op,
+    });
+  } catch (error) {
+    console.log(error);
+    return res.json({
+      success: false,
+      error: error,
+      msg: error,
+    });
+  }
+};
+
+module.exports.updateJobStatus = async (req, res, next) => {
+  try {
+    const { job_id, user_id, status } = req.body;
+    const job = await Job.findById(job_id);
+    const user = await userModel.findById(user_id);
+
+    if (job.applicants) {
+      job.applicants.forEach((applicant) => {
+        if (applicant.applicant == user_id) {
+          applicant.status = status;
+          user.appliedJobs.forEach((appliedJob) => {
+            if (appliedJob.job == job_id) {
+              appliedJob.status = status;
+            }
+          });
+        }
+      });
+    }
+    job.save();
+    user.save();
+    return res.json({
+      success: true,
+      msg: "Job Status Updated Successfully",
     });
   } catch (error) {
     console.log(error);

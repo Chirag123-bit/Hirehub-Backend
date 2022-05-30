@@ -451,7 +451,7 @@ module.exports.login = async (req, res, next) => {
       { expiresIn: "24h" }
     );
     if (user.type === "Company") {
-      const company = await Company.findOne({ user: user._id });
+      const company = await Company.findOne({ _id: user.company });
 
       return res.json({
         status: true,
@@ -498,5 +498,28 @@ module.exports.getAllUsers = async (req, res, next) => {
     return res.json(users);
   } catch (e) {
     next(e);
+  }
+};
+
+//validate that the user has not applied to the job before
+module.exports.applyJob = async (req, res, next) => {
+  try {
+    const { jobId, userId } = req.query;
+    const user = await User.findById(userId);
+    user.appliedJobs.forEach((job) => {
+      if (job.job.toString() === jobId) {
+        return res.json({
+          status: false,
+          msg: "You have already applied to this job",
+          data: job,
+        });
+      }
+    });
+    return res.json({
+      status: true,
+      msg: "You can apply to this job",
+    });
+  } catch (e) {
+    // next(e);
   }
 };
