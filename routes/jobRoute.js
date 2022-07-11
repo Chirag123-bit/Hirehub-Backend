@@ -9,6 +9,7 @@ const {
   updateJobStatus,
   getAppliedJobs,
   getAppliedJobsApp,
+  getSavedJobs,
 } = require("../controllers/jobController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -22,6 +23,7 @@ router.get("/getSectorJob", getJobsForSpecificSector);
 router.get("/getJob", getJob);
 router.post("/updateJobStatus", updateJobStatus);
 
+router.route("/savedJobs").get(protect, getSavedJobs);
 router.route("/appliedJobs").get(protect, getAppliedJobs);
 router.route("/appliedJobsApp").get(protect, getAppliedJobsApp);
 router.route("/applyForJob").post(protect, applyForJob);

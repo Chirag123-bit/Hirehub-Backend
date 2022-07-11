@@ -359,14 +359,29 @@ module.exports.getAppliedJobs = asyncHandler(async (req, res, next) => {
         path: "company",
       },
     });
-  // .populate("appliedJobs.job")
-  // .populate("appliedJobs.job.company")
-  // .populate("appliedJobs.job.sector");
-
   console.log(jobs.appliedJobs[0]);
 
   if (!jobs) {
     res.status(400).send("Applied Jobs not found");
+  } else {
+    res.status(200).send(jobs);
+  }
+});
+module.exports.getSavedJobs = asyncHandler(async (req, res, next) => {
+  const usr = await req.user._id;
+  var jobs = await userModel
+    .findById(usr)
+    .select("savedJobs")
+    .populate({
+      path: "savedJobs.job",
+      populate: {
+        path: "company",
+      },
+    });
+  console.log(jobs.savedJobs[0]);
+
+  if (!jobs) {
+    res.status(400).send("Saved Jobs not found");
   } else {
     res.status(200).send(jobs);
   }
