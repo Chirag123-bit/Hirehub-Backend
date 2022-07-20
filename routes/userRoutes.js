@@ -19,6 +19,7 @@ const {
   changeProfileImage,
   updatePassword,
   updateCompanyDetails,
+  allUsersApp,
 } = require("../controllers/usersController");
 const { protect } = require("../middleware/authMiddleware");
 
@@ -36,6 +37,7 @@ router.post("/reSendVerification/", resendVerification);
 router.get("/applyJob/", applyJob);
 
 router.route("/getAllUsers").get(protect, allUsers);
+router.route("/getAllUsersApp").get(protect, allUsersApp);
 router.route("/addEvent").post(protect, addEvent);
 router.route("/addTodo").post(protect, addTodos);
 router.route("/completeEvent").put(protect, markEventCompleted);

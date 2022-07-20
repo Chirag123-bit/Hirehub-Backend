@@ -620,8 +620,31 @@ module.exports.allUsers = async (req, res, next) => {
       }
     : {};
 
-  const users = await User.find(keyword).find({ _id: { $ne: req.user._id } });
+  const users = await User.find(keyword)
+    .find({ _id: { $ne: req.user._id } })
+    .select(
+      "-password -__v -isVerified -isAvatarImageSet -additional -appliedJobs -todos -professional -events -savedJobs -favouriteJobs"
+    );
   res.send(users);
+};
+module.exports.allUsersApp = async (req, res, next) => {
+  const keyword = req.query.search
+    ? {
+        $or: [
+          { firstName: { $regex: req.query.search, $options: "i" } },
+          { lastName: { $regex: req.query.search, $options: "i" } },
+          { username: { $regex: req.query.search, $options: "i" } },
+          { email: { $regex: req.query.search, $options: "i" } },
+        ],
+      }
+    : {};
+
+  const users = await User.find(keyword)
+    .find({ _id: { $ne: req.user._id } })
+    .select(
+      "-password -__v -isVerified -isAvatarImageSet  -appliedJobs -todos  -events -savedJobs -favouriteJobs"
+    );
+  return res.json({ data: users });
 };
 
 module.exports.addEvent = async (req, res, next) => {
